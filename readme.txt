@@ -17,7 +17,7 @@ How it Works
 rsDrop uses true end-to-end encryption (E2EE) with front-end (client-side) AES encryption in your browser, so the server stores only ciphertext and a nonce.  
 The decryption secret lives in the URL fragment after '#', for example:  
 `https://host/p/abcd123#BASE64_KEY`  
-Browsers never send this fragment to servers, so the key is never logged or transmitted.  
+Browsers never send this fragment to servers, so the key is never transmitted or logged on the server.  
 
 When you send your URL over a reasonably secure messaging platform such as Discord or Slack, the recipient can use the link to fetch the ciphertext and nonce from the server.  
 Decryption then occurs entirely in their browser using the key stored in the URL fragment, which is never sent to the server.
