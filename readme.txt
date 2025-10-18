@@ -9,7 +9,7 @@ rsDrop is a tiny, end-to-end encrypted, pastebin-style sharing app.
 It aims to be lightweight, fast, and ephemeral by keeping data only in memory.
 
 Why  
-Most self-hosted paste platforms require excessive server resources and setup time to run.  
+Most self-hosted paste platforms require excessive server resources and can be complicated to configure.  
 rsDrop is designed to implement secure, ephemeral, self-hosted secret sharing with compact, easy-to-audit code.  
 That said, this is a work in progress—please submit pull requests for any vulnerabilities identified.
 
