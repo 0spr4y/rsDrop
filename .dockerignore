@@ -1,0 +1,16 @@
+# Build artifacts
+target
+
+# VCS
+.git
+.gitignore
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Node/npm (if any assets get added later)
+node_modules
+
