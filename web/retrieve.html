@@ -69,7 +69,7 @@
                     const fragmentKeyB64 = window.location.hash.substring(1); // Remove "#"
 
                     if (!pasteId) {
-                        throw new Error('Could not find Paste ID in the URL path.');
+                        throw new Error('Could not find Paste ID in the URL path. It may have expired check the link');
                     }
                     if (!fragmentKeyB64) {
                         throw new Error('Decryption key (#) is missing from the URL.');
@@ -129,12 +129,19 @@
                     const plaintext = new TextDecoder().decode(decryptedDataBytes);
                     contentDiv.textContent = plaintext;
                     statusDiv.textContent = 'Paste decrypted successfully.';
-                } catch (error) {
+                    } catch (error) {
                     console.error('Retrieval/Decryption error:', error);
                     statusDiv.textContent = '';
-                    contentDiv.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+
+                    const span = document.createElement('span');
+                    span.className = 'error';
+                    const msg = (error && typeof error.message === 'string') ? error.message : String(error ?? 'Unknown error');
+                    span.textContent = `Error: ${msg}`;
+
+                    contentDiv.replaceChildren(span); // clears and inserts safely
+                    }
                 }
-            }
+            
         </script>
     </head>
     <body onload="getAndDecryptPaste()">

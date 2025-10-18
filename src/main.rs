@@ -99,7 +99,9 @@ async fn main() {
             ("https://", Some(config))
         }
         (None, None) => {
-            info!("TLS not configured. Running in HTTP mode.");
+            warn!(
+                "TLS not configured: running in HTTP mode. Traffic is unencrypted and potentially tamperable. Provide --cert and --key to enable HTTPS."
+            );
             ("http://", None)
         }
         _ => {
@@ -121,11 +123,12 @@ async fn main() {
         delete_expired_pastes(cleanup_state).await;
     });
 
-    // Setup CORS
+    // Setup CORS enable if required
+    /*
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE])
-        .allow_origin(Any);
+        .allow_origin("TODO");*/
 
     // Define routes.
     let app = Router::new()
@@ -134,7 +137,7 @@ async fn main() {
         .route("/p/*path", get(handle_retrieve_page))
         .route("/api/paste/:paste_id", get(handle_get_encrypted_paste))
         .with_state(shared_state)
-        .layer(cors);
+        //.layer(cors);
 
     info!("Listening on {}", args.addr);
 

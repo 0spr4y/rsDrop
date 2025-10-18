@@ -1,18 +1,19 @@
-  rrrrr   sssss   DDDDD    rrrrr   ooooo  ppppp
-  r   r  s        D    D   r   r  o     o p   p
-  rrrr    sss     D     D  rrrr   o     o pppp 
-  r  r        s   D    D   r  r   o     o p    
-  r   r   sssss   DDDDD    r   r   ooooo  p     
-                 rsDrop
+              ________                       
+_______  _____\______ \_______  ____ ______  
+\_  __ \/  ___/|    |  \_  __ \/  _ \\____ \ 
+ |  | \/\___ \ |    `   \  | \(  <_> )  |_> >
+ |__|  /____  >_______  /__|   \____/|   __/ 
+            \/        \/             |__|      
+
 
 rsDrop is a tiny, end‑to‑end encrypted, pastebin‑style sharing app.
-It aims to be lightweight and fast by keeping data only in memory.
+It aims to be lightweight, fast and ephemeral by keeping data only in memory.
 
 What it is
 - End‑to‑end encrypted: content is encrypted client‑side before upload.
 - Pastebin‑style sharing: create a snippet and share a single link.
 - In‑memory storage: the server holds ciphertext in RAM only (no disk).
-- Ephemeral by design: data can expire and disappears on restart.
+- Ephemeral by design: data expires by default and disappears on restart.
 - Lightweight footprint: minimal surface area, quick to run and reset.
 
 How it works (high level)
