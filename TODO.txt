@@ -1,0 +1,14 @@
+Ok I would like you to review this quantum secure rsDrop text sharing platform. Key current features are you can share a link that is e2e encrypted, will only live 60 minutes on the server and is quantum secure. I would like to add a OTP feature to it where a user can generate a 64 OTP secure keys  in a diffrent tab and with an client side upload download PAD with the keys then you can generate a PAD and the other side uploads it, then you share a link with a PAD id and a number up to 64 and then paste, then the other side can see it "use axum::{
+
+Security review findings (vulnerabilities and mitigations)
+- Unbounded memory growth (DoS): server stores pastes in RAM with only time-based expiry; no cap on total count or bytes. Add a global memory/paste cap and eviction (LRU/TTL), and reject writes when over limit. Consider per-IP quotas.
+- Missing HTTP body size limit: JSON request bodies are not capped at the transport layer, allowing oversized payloads to be read before size checks. Add `DefaultBodyLimit` or `RequestBodyLimitLayer` (e.g., ~11 MiB) to Axum.
+- No rate limiting/throttling: endpoints can be spammed to exhaust RAM/CPU. Add per-IP rate limiting (tower layers) and cheap pre-checks.
+- CORS is `Any`: combined with no auth, browsers can be induced to create pastes cross-site (CSRF-like resource abuse). If public API is intended, keep but pair with rate limits; otherwise restrict origins.
+- HTTP by default: E2E protects content, but metadata and responses are tamperable over plaintext. Default to TLS or provide strong warning; enable HSTS when TLS is on.
+- Client XSS via error rendering: `web/retrieve.html` uses `innerHTML` with interpolated `error.message` that may include server response text. Switch to `textContent` for errors (or escape before inserting).
+- Missing security headers: no CSP/Referrer-Policy/X-Content-Type-Options. Serve static pages with a strict CSP (no inline, nonce-based if needed) and add common headers.
+- Long cleanup interval: expired items linger up to 1h beyond TTL, increasing memory pressure. Reduce interval or schedule per-expiry.
+- Paste ID logging: IDs are logged; acceptable, but consider redacting in prod logs if link secrecy is a concern.
+- Cryptography notes: 32 random bytes are hashed to derive AES-GCM key; hashing is unnecessary but not harmful. Ensure nonces are unique per encryption (current random 12-byte IV is fine). Consider authenticated metadata versioning to prevent confusion.
+- Build fragility (non-security): missing `handle_retrieve_page`/`handle_get_encrypted_paste` implementations referenced by routes; Cargo edition set to `2024` may not be available on stable.

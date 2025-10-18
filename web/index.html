@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Create Encrypted Paste</title>
+        <style>
+            /* Styles mostly unchanged */
+            body { text-align: center; font-family: Arial, sans-serif; }
+            #form-container { display: inline-block; text-align: left; margin-top: 50px; }
+            textarea { display: block; margin-bottom: 10px; width: 400px; }
+            #pasteLink { margin-top: 15px; word-wrap: break-word; background-color: #eee; padding: 10px; border-radius: 5px; min-height: 50px; }
+            #status { margin-top: 5px; font-style: italic; color: #555; }
+        </style>
+        <script>
+            // --- Crypto Constants ---
+            const KEY_BYTE_LENGTH = 32; // For fragment key raw bytes
+            const NONCE_BYTE_LENGTH = 12; // AES-GCM standard nonce length
+
+            // --- Helper Functions ---
+            // Base64 encoding for ArrayBuffers
+            function arrayBufferToBase64(buffer) {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                const len = bytes.byteLength;
+                for (let i = 0; i < len; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return window.btoa(binary);
+            }
+
+            // Derive AES key from fragment key bytes using SHA-256
+            async function deriveKey(fragmentKeyBytes) {
+                // Directly hash the fragment key bytes with SHA-256
+                const hashedKey = await window.crypto.subtle.digest('SHA-256', fragmentKeyBytes);
+                // Import the hash as an AES-GCM key
+                return await window.crypto.subtle.importKey(
+                    "raw",
+                    hashedKey,
+                    { name: "AES-GCM" },
+                    true,  // Set to true for extractability if needed (could be false for production)
+                    ["encrypt", "decrypt"]
+                );
+            }
+
+            // --- Main Function ---
+            async function createEncryptedPaste(event) {
+                event.preventDefault();
+                const content = document.getElementById('content').value;
+                const pasteLinkDiv = document.getElementById('pasteLink');
+                const statusDiv = document.getElementById('status');
+                pasteLinkDiv.textContent = ''; // Clear previous link
+                statusDiv.textContent = 'Processing...';
+
+                if (!content) {
+                    statusDiv.textContent = 'Error: Content cannot be empty.';
+                    return;
+                }
+
+                try {
+                    // 1. Generate random key material for the fragment
+                    const fragmentKeyBytes = window.crypto.getRandomValues(new Uint8Array(KEY_BYTE_LENGTH));
+                    const fragmentKeyB64 = arrayBufferToBase64(fragmentKeyBytes);
+
+                    // 2. Derive AES encryption key
+                    statusDiv.textContent = 'Deriving encryption key...';
+                    const aesKey = await deriveKey(fragmentKeyBytes);
+
+                    // 3. Generate random Nonce (IV)
+                    const nonceBytes = window.crypto.getRandomValues(new Uint8Array(NONCE_BYTE_LENGTH));
+
+                    // 4. Encrypt the content
+                    statusDiv.textContent = 'Encrypting content...';
+                    const plaintextBytes = new TextEncoder().encode(content);
+                    const encryptedDataBytes = await window.crypto.subtle.encrypt(
+                        {
+                            name: "AES-GCM",
+                            iv: nonceBytes
+                        },
+                        aesKey,
+                        plaintextBytes
+                    );
+
+                    // 5. Base64 encode encrypted data and nonce for sending
+                    const encryptedDataB64 = arrayBufferToBase64(encryptedDataBytes);
+                    const nonceB64 = arrayBufferToBase64(nonceBytes);
+
+                    // 6. Send encrypted data and nonce to the server
+                    statusDiv.textContent = 'Sending encrypted data to server...';
+                    const response = await fetch('/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            encrypted_data_b64: encryptedDataB64,
+                            nonce_b64: nonceB64
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Server error: ${response.status} - ${errorText}`);
+                    }
+
+                    const responseData = await response.json();
+                    const pasteId = responseData.paste_id;
+                    if (!pasteId) {
+                        throw new Error('Server did not return a paste ID.');
+                    }
+
+                    // 7. Construct the final URL using proper variable interpolation
+                    const pasteUrl = `${window.location.origin}/p/${pasteId}#${fragmentKeyB64}`;
+
+                    // 8. Display the result
+                    pasteLinkDiv.innerHTML = `Paste created successfully!<br>
+                        Share this link (includes decryption key after #):<br>
+                        <a href="${pasteUrl}" target="_blank">${pasteUrl}</a>`;
+                    statusDiv.textContent = 'Done. The server cannot read your paste.';
+                } catch (error) {
+                    console.error('Encryption/Creation error:', error);
+                    statusDiv.textContent = 'Error: ' + error.message;
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <h1>Zero-Knowledge Encrypted Paste</h1>
+        <p>Content is encrypted in your browser before sending. The server only stores encrypted data.</p>
+        <div id="form-container">
+            <form onsubmit="createEncryptedPaste(event)">
+                <textarea id="content" name="content" rows="10" cols="60" placeholder="Paste your sensitive content here..."></textarea><br>
+                <input type="submit" value="Create Encrypted Paste">
+            </form>
+            <div id="status"></div>
+            <div id="pasteLink"></div>
+        </div>
+    </body>
+</html>

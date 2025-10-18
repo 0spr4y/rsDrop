@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>View Encrypted Paste</title>
+        <style>
+            body { font-family: Arial, sans-serif; }
+            #pasteContent {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                border: 1px solid #ccc;
+                padding: 15px;
+                margin-top: 20px;
+                background-color: #f9f9f9;
+                min-height: 100px;
+            }
+            #status { margin-top: 10px; font-style: italic; color: #555; }
+            .error { color: red; font-weight: bold; }
+        </style>
+        <script>
+            // --- Crypto Constants ---
+            const KEY_BYTE_LENGTH = 32; // Must match creation
+            const NONCE_BYTE_LENGTH = 12; // Must match creation
+
+            // --- Helper Functions ---
+            // Convert ArrayBuffer to Base64 string
+            function arrayBufferToBase64(buffer) {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return window.btoa(binary);
+            }
+
+            // Convert Base64 string to ArrayBuffer
+            function base64ToArrayBuffer(base64) {
+                const binaryString = window.atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            }
+
+            // Derive an AES-GCM key from the fragment key bytes using SHA-256
+            async function deriveKey(fragmentKeyBytes) {
+                const hashedKey = await window.crypto.subtle.digest('SHA-256', fragmentKeyBytes);
+                return await window.crypto.subtle.importKey(
+                    "raw",
+                    hashedKey,
+                    { name: "AES-GCM" },
+                    true,
+                    ["decrypt"]
+                );
+            }
+
+            // --- Main Function for Retrieving and Decrypting a Paste ---
+            async function getAndDecryptPaste() {
+                const contentDiv = document.getElementById('pasteContent');
+                const statusDiv = document.getElementById('status');
+                contentDiv.textContent = ''; // Clear previous
+                statusDiv.textContent = 'Processing URL...';
+
+                try {
+                    // 1. Extract paste ID from URL path and decryption key from URL fragment
+                    const pathParts = window.location.pathname.split('/');
+                    const pasteId = pathParts[pathParts.length - 1];
+                    const fragmentKeyB64 = window.location.hash.substring(1); // Remove "#"
+
+                    if (!pasteId) {
+                        throw new Error('Could not find Paste ID in the URL path.');
+                    }
+                    if (!fragmentKeyB64) {
+                        throw new Error('Decryption key (#) is missing from the URL.');
+                    }
+
+                    statusDiv.textContent = 'Decoding decryption key...';
+                    let fragmentKeyBytes;
+                    try {
+                        fragmentKeyBytes = base64ToArrayBuffer(fragmentKeyB64);
+                        if (fragmentKeyBytes.byteLength !== KEY_BYTE_LENGTH) {
+                            throw new Error(`Invalid key length: ${fragmentKeyBytes.byteLength}`);
+                        }
+                    } catch (e) {
+                        console.error("Base64 Decode Error:", e);
+                        throw new Error('Could not decode the decryption key from the URL fragment. It might be corrupted or incomplete.');
+                    }
+
+                    // 2. Derive the AES decryption key
+                    statusDiv.textContent = 'Deriving decryption key...';
+                    const aesKey = await deriveKey(fragmentKeyBytes);
+
+                    // 3. Fetch encrypted data and nonce from the server
+                    statusDiv.textContent = 'Fetching encrypted data from server...';
+                    const response = await fetch(`/api/paste/${pasteId}`);
+                    if (response.status === 404) {
+                        throw new Error('Paste not found. It may have expired or the link is incorrect.');
+                    }
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Server error fetching data: ${response.status} - ${errorText}`);
+                    }
+                    const responseData = await response.json(); // Expects { encrypted_data_b64, nonce_b64 }
+
+                    // 4. Decode encrypted data and nonce
+                    statusDiv.textContent = 'Decoding data...';
+                    const encryptedDataBytes = base64ToArrayBuffer(responseData.encrypted_data_b64);
+                    const nonceBytes = base64ToArrayBuffer(responseData.nonce_b64);
+                    if (nonceBytes.byteLength !== NONCE_BYTE_LENGTH) {
+                        throw new Error('Received invalid nonce length from server.');
+                    }
+
+                    // 5. Decrypt the encrypted data using AES-GCM
+                    statusDiv.textContent = 'Decrypting...';
+                    let decryptedDataBytes;
+                    try {
+                        decryptedDataBytes = await window.crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv: nonceBytes },
+                            aesKey,
+                            encryptedDataBytes
+                        );
+                    } catch (e) {
+                        console.error("Decryption Error:", e);
+                        throw new Error('Decryption failed. The key in the URL fragment is likely incorrect, or the data has been tampered with.');
+                    }
+
+                    // 6. Decode the plaintext and display it
+                    const plaintext = new TextDecoder().decode(decryptedDataBytes);
+                    contentDiv.textContent = plaintext;
+                    statusDiv.textContent = 'Paste decrypted successfully.';
+                } catch (error) {
+                    console.error('Retrieval/Decryption error:', error);
+                    statusDiv.textContent = '';
+                    contentDiv.innerHTML = `<span class="error">Error: ${error.message}</span>`;
+                }
+            }
+        </script>
+    </head>
+    <body onload="getAndDecryptPaste()">
+        <h1>View Encrypted Paste</h1>
+        <p>Attempting to decrypt content using the key from the URL fragment (#).</p>
+        <div id="status">Loading...</div>
+        <pre id="pasteContent"></pre>
+    </body>
+</html>

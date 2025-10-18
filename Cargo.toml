@@ -1,0 +1,22 @@
+[package]
+name = "rsDrop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["full"] } # Async runtime (macros, rt-multi-thread, time, sync, net, fs) # Added fs feature
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+tower-http = { version = "0.5", features = ["cors"] }
+html-escape = "0.2"
+
+# --- New Dependencies ---
+clap = { version = "4", features = ["derive"] } # Command-line argument parsing
+axum-server = { version = "0.6", features = ["tls-rustls"] } # Axum server with TLS support
+rustls = "0.22"             # TLS library (used by axum-server)
+rustls-pemfile = "2.1"       # Reading PEM formatted keys/certs
