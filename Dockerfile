@@ -40,3 +40,4 @@ CMD ["--addr", "0.0.0.0:8080"]
 
 # To run with HTTPS by default (uncomment to use baked-in cert paths)
 # CMD ["--addr", "0.0.0.0:8443", "--cert", "/app/certs/cert.pem", "--key", "/app/certs/key.pem"]
+
