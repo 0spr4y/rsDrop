@@ -26,7 +26,7 @@ What it is
 - End-to-end encrypted: content is encrypted client-side before upload.  
 - Pastebin-style sharing: create a snippet and share a single link.  
 - In-memory storage: the server holds ciphertext in RAM only (no disk).  
-- Ephemeral by design: data expires by default and disappears on restart.  
+- Ephemeral by design: pastes expire after 60 minutes by default and disappears on restart.  
 - Lightweight footprint: minimal surface area, quick to run and reset.
 
 What it’s good for  
