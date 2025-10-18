@@ -136,7 +136,7 @@ async fn main() {
         .route("/create", post(handle_create_encrypted))
         .route("/p/*path", get(handle_retrieve_page))
         .route("/api/paste/:paste_id", get(handle_get_encrypted_paste))
-        .with_state(shared_state)
+        .with_state(shared_state);
         //.layer(cors);
 
     info!("Listening on {}", args.addr);
