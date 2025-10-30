@@ -7,18 +7,18 @@ RUN apk add --no-cache musl-dev build-base \
 
 WORKDIR /app
 
-# Leverage build cache for dependencies
+# Prime dependency cache without compiling a placeholder binary
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src \
- && echo "fn main() {}" > src/main.rs \
- && cargo build --release --target x86_64-unknown-linux-musl || true
+ && printf "fn main() {}\n" > src/main.rs \
+ && cargo fetch
 
 # Copy real sources and build
 COPY . .
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # --- Runtime: minimal, no shell ---
-FROM scratch
+FROM alpine:3.20
 WORKDIR /app
 
 # Non-root user for safety
@@ -31,7 +31,8 @@ COPY --from=builder /app/web /app/web
 EXPOSE 8080 8443
 
 ENTRYPOINT ["/app/rsDrop"]
-CMD ["--addr", "0.0.0.0:8080"]
+# Uncomment to override the default address provided by Clap
+# CMD ["--addr", "0.0.0.0:8080"]
 
 # Optional: copy TLS certs into the image (uncomment and provide files)
 # COPY certs/cert.pem /app/certs/cert.pem
@@ -40,4 +41,3 @@ CMD ["--addr", "0.0.0.0:8080"]
 
 # To run with HTTPS by default (uncomment to use baked-in cert paths)
 # CMD ["--addr", "0.0.0.0:8443", "--cert", "/app/certs/cert.pem", "--key", "/app/certs/key.pem"]
-

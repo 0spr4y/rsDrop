@@ -1,14 +1,14 @@
 use axum::{
     extract::{Json, Path, State},
-    http::{Method, StatusCode},
-    response::{Html, IntoResponse},
+    http::StatusCode,
+    response::Html,
     routing::{get, post},
     Router,
 };
-use axum_server::tls_rustls::RustlsConfig;
+use axum_server::{tls_rustls::RustlsConfig, Handle};
 use base64::{engine::general_purpose::STANDARD as base64_engine, Engine as _};
 use clap::Parser;
-use rand::{distributions::Alphanumeric, Rng, RngCore};
+use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -18,7 +18,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -142,13 +141,26 @@ async fn main() {
     info!("Listening on {}", args.addr);
 
     if let Some(tls_config) = tls_config {
+        let handle = Handle::new();
+        let shutdown_handle = handle.clone();
+        let shutdown_task = tokio::spawn(async move {
+            shutdown_signal().await;
+            info!("Shutdown signal received. Stopping TLS server.");
+            shutdown_handle.shutdown();
+        });
+
         axum_server::bind_rustls(args.addr, tls_config)
-            .serve(app.into_make_service())
+            .handle(handle)
+            .serve(app.clone().into_make_service())
             .await
             .unwrap_or_else(|e| error!("HTTPS Server failed: {}", e));
+
+        // Ensure the shutdown task finishes (ignore cancellation errors)
+        let _ = shutdown_task.await;
     } else {
         let listener = tokio::net::TcpListener::bind(args.addr).await.unwrap();
         axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
             .await
             .unwrap_or_else(|e| error!("HTTP Server failed: {}", e));
     }
@@ -179,6 +191,27 @@ async fn delete_expired_pastes(state: SharedState) {
             !expired
         });
         info!("Cleanup finished. Current paste count: {}", pastes.len());
+    }
+}
+
+async fn shutdown_signal() {
+    let mut warned = false;
+    loop {
+        match tokio::signal::ctrl_c().await {
+            Ok(_) => {
+                if warned {
+                    info!("Received second Ctrl+C. Proceeding with shutdown.");
+                    break;
+                } else {
+                    warned = true;
+                    warn!("Received Ctrl+C. Press Ctrl+C again to exit.");
+                }
+            }
+            Err(e) => {
+                error!("Failed to listen for Ctrl+C: {}", e);
+                break;
+            }
+        }
     }
 }
 
