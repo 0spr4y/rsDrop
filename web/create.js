@@ -16,12 +16,7 @@ const copyButton = document.getElementById('copyButton');
 const openLink = document.getElementById('openLink');
 
 function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
+    return window.btoa(Array.from(new Uint8Array(buffer), (byte) => String.fromCharCode(byte)).join(''));
 }
 
 // URL-safe, unpadded Base64: survives being pasted into chat apps and emails intact.

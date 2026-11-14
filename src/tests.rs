@@ -4,10 +4,8 @@ fn state() -> SharedState {
     Arc::new(AppData {
         pastes: RwLock::new(HashMap::new()),
         create_slots: Semaphore::new(0),
-        config: AppConfig {
-            create_token: Some("secret".into()),
-            tls_enabled: false,
-        },
+        create_token: Some("secret".into()),
+        tls_enabled: false,
     })
 }
 

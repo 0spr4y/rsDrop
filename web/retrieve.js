@@ -6,12 +6,7 @@ const statusLine = document.getElementById('status');
 const copyButton = document.getElementById('copyButton');
 
 function base64ToArrayBuffer(base64) {
-    const binaryString = window.atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
+    return Uint8Array.from(window.atob(base64), (char) => char.charCodeAt(0)).buffer;
 }
 
 // Accepts URL-safe or standard Base64, with or without padding.
@@ -34,8 +29,7 @@ function setStatus(message, kind) {
 
 async function getAndDecryptPaste() {
     try {
-        const pathParts = window.location.pathname.split('/');
-        const pasteId = pathParts[pathParts.length - 1];
+        const pasteId = window.location.pathname.split('/').pop();
         const fragmentKeyB64 = window.location.hash.substring(1);
 
         if (!pasteId) {
