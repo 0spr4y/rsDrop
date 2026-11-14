@@ -5,7 +5,7 @@ const GCM_TAG_BYTE_LENGTH = 16;
 const MAX_ENCRYPTED_BYTES = 640 * 1024;
 const MAX_PLAINTEXT_BYTES = MAX_ENCRYPTED_BYTES - NONCE_BYTE_LENGTH - GCM_TAG_BYTE_LENGTH;
 
-const form = document.getElementById('pasteForm');
+const form = document.getElementById('shareForm');
 const contentInput = document.getElementById('content');
 const sizeMeta = document.getElementById('sizeMeta');
 const submitButton = document.getElementById('submitButton');
@@ -54,7 +54,7 @@ function updateSize() {
     return { bytes, over };
 }
 
-async function createEncryptedPaste(event) {
+async function createEncryptedShare(event) {
     event.preventDefault();
     resultCard.classList.add('is-hidden');
 
@@ -99,14 +99,14 @@ async function createEncryptedPaste(event) {
         if (!response.ok) {
             throw new Error((await response.text()) || `Server error ${response.status}`);
         }
-        const pasteId = (await response.json()).paste_id;
-        if (!pasteId) {
-            throw new Error('Server did not return a paste ID.');
+        const shareId = (await response.json()).share_id;
+        if (!shareId) {
+            throw new Error('Server did not return a share ID.');
         }
 
-        const pasteUrl = `${window.location.origin}/p/${pasteId}#${arrayBufferToBase64Url(fragmentKeyBytes)}`;
-        shareLink.value = pasteUrl;
-        openLink.href = pasteUrl;
+        const shareUrl = `${window.location.origin}/s/${shareId}#${arrayBufferToBase64Url(fragmentKeyBytes)}`;
+        shareLink.value = shareUrl;
+        openLink.href = shareUrl;
         copyButton.textContent = 'Copy';
         resultCard.classList.remove('is-hidden');
         contentInput.value = '';
@@ -138,6 +138,6 @@ syncTokenState();
 updateSize();
 window.addEventListener('hashchange', syncTokenState);
 contentInput.addEventListener('input', updateSize);
-form.addEventListener('submit', createEncryptedPaste);
+form.addEventListener('submit', createEncryptedShare);
 copyButton.addEventListener('click', copyShareLink);
 shareLink.addEventListener('focus', () => shareLink.select());

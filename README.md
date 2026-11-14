@@ -47,7 +47,7 @@ rsDrop uses end-to-end encryption (E2EE): content is encrypted with AES-GCM in y
 The decryption secret lives in the URL fragment after `#`, for example:
 
 ```text
-https://host/p/abcd123#BASE64_KEY
+https://host/s/abcd123#BASE64_KEY
 ```
 
 Browsers do not include this fragment in HTTP requests. With the unmodified application, the key stays in the browser and is not uploaded to the server.

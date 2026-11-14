@@ -36,9 +36,9 @@ const MAX_REQUEST_BODY_SIZE: usize = 1024 * 1024; // 1 MiB: fits a max-size shar
 // Uploads buffered at once; each holds up to ~2 MiB while it is read and decoded, so this bounds peak memory.
 const MAX_CONCURRENT_CREATES: usize = 8;
 const CREATE_TIMEOUT: Duration = Duration::from_secs(30); // A stalled upload cannot hold a slot for longer
-const MAX_PASTE_COUNT: usize = 100; // Maximum number of shares held on the server at once
+const MAX_SHARE_COUNT: usize = 100; // Maximum number of shares held on the server at once
 const CREATE_TOKEN_BYTE_LENGTH: usize = 32; // Random bytes behind the create token
-const PASTE_ID_LENGTH: usize = 22; // Length of the random URL-safe ID
+const SHARE_ID_LENGTH: usize = 22; // Length of the random URL-safe ID
 const NONCE_LENGTH: usize = 12; // Standard AES-GCM nonce length
 const EXPIRY_DURATION: Duration = Duration::from_secs(60 * 60); // Shares live for 60 minutes
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60); // Sweep every minute; dropped share buffers are overwritten before release
@@ -76,20 +76,20 @@ struct Args {
     key: Option<PathBuf>,
     #[arg(long, default_value = "0.0.0.0:8080")]
     addr: SocketAddr,
-    /// Require a create token to create pastes (also accepted as -ct).
+    /// Require a create token to create shares (also accepted as -ct).
     /// A random token is generated and printed in the log at startup.
     #[arg(long = "create-token")]
     create_token: bool,
 }
 
 // --- Data Structures ---
-struct EncryptedPaste {
+struct EncryptedShare {
     encrypted_data: Vec<u8>,
     nonce: Vec<u8>,
     timestamp: Instant,
 }
 
-impl Drop for EncryptedPaste {
+impl Drop for EncryptedShare {
     fn drop(&mut self) {
         // Best-effort random pass, followed by optimization-resistant zeroization.
         // Do not panic during cleanup if the random source fails.
@@ -103,18 +103,18 @@ impl Drop for EncryptedPaste {
 
 /// Body of both the create request and the retrieve response.
 #[derive(Serialize, Deserialize)]
-struct PastePayload {
+struct SharePayload {
     encrypted_data_b64: String,
     nonce_b64: String,
 }
 
 #[derive(Serialize)]
 struct CreateResponse {
-    paste_id: String,
+    share_id: String,
 }
 
 struct AppData {
-    pastes: RwLock<HashMap<String, EncryptedPaste>>,
+    shares: RwLock<HashMap<String, EncryptedShare>>,
     create_slots: Semaphore,
     /// When set, POST /create must supply this token.
     create_token: Option<String>,
@@ -177,7 +177,7 @@ async fn main() {
     let create_token = args.create_token.then(generate_create_token);
     match &create_token {
         Some(token) => {
-            info!("Create token enabled. Pastes can only be created with this token.");
+            info!("Create token enabled. Shares can only be created with this token.");
             info!("Create token: {}", token);
             info!(
                 "Share it as a link: {}://{}/#{}",
@@ -185,19 +185,19 @@ async fn main() {
             );
         }
         None => warn!(
-            "Create token disabled: anyone who can reach the server can create pastes. With no rate limiting, {} small requests fill every slot and block all new pastes for up to {} minutes (denial of service). Use --create-token (-ct) to restrict who can create pastes.",
-            MAX_PASTE_COUNT,
+            "Create token disabled: anyone who can reach the server can create shares. With no rate limiting, {} small requests fill every slot and block all new shares for up to {} minutes (denial of service). Use --create-token (-ct) to restrict who can create shares.",
+            MAX_SHARE_COUNT,
             EXPIRY_DURATION.as_secs() / 60
         ),
     }
 
     let shared_state: SharedState = Arc::new(AppData {
-        pastes: RwLock::new(HashMap::new()),
+        shares: RwLock::new(HashMap::new()),
         create_slots: Semaphore::new(MAX_CONCURRENT_CREATES),
         create_token,
         tls_enabled: tls_config.is_some(),
     });
-    tokio::spawn(delete_expired_pastes(shared_state.clone()));
+    tokio::spawn(delete_expired_shares(shared_state.clone()));
 
     let app = Router::new()
         .route("/", get(handle_index))
@@ -208,8 +208,8 @@ async fn main() {
                 limit_concurrent_creates,
             )),
         )
-        .route("/p/*path", get(handle_retrieve_page))
-        .route("/api/paste/:paste_id", get(handle_get_encrypted_paste))
+        .route("/s/*path", get(handle_retrieve_page))
+        .route("/api/share/:share_id", get(handle_get_encrypted_share))
         .route("/static/:file", get(handle_static_asset))
         .layer(middleware::from_fn_with_state(
             shared_state.clone(),
@@ -247,10 +247,10 @@ async fn main() {
 }
 
 // --- Utility Functions ---
-fn generate_paste_id() -> String {
+fn generate_share_id() -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
-        .take(PASTE_ID_LENGTH)
+        .take(SHARE_ID_LENGTH)
         .map(char::from)
         .collect()
 }
@@ -260,24 +260,24 @@ fn generate_create_token() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// A paste ID is valid only if it has the exact shape `generate_paste_id` produces.
-fn is_valid_paste_id(paste_id: &str) -> bool {
-    paste_id.len() == PASTE_ID_LENGTH && paste_id.bytes().all(|b| b.is_ascii_alphanumeric())
+/// A share ID is valid only if it has the exact shape `generate_share_id` produces.
+fn is_valid_share_id(share_id: &str) -> bool {
+    share_id.len() == SHARE_ID_LENGTH && share_id.bytes().all(|b| b.is_ascii_alphanumeric())
 }
 
-fn is_expired(paste: &EncryptedPaste, now: Instant) -> bool {
-    now.duration_since(paste.timestamp) >= EXPIRY_DURATION
+fn is_expired(share: &EncryptedShare, now: Instant) -> bool {
+    now.duration_since(share.timestamp) >= EXPIRY_DURATION
 }
 
-async fn delete_expired_pastes(state: SharedState) {
+async fn delete_expired_shares(state: SharedState) {
     let mut interval = tokio::time::interval(CLEANUP_INTERVAL);
     loop {
         interval.tick().await;
         let now = Instant::now();
-        state.pastes.write().await.retain(|id, paste| {
-            let expired = is_expired(paste, now);
+        state.shares.write().await.retain(|id, share| {
+            let expired = is_expired(share, now);
             if expired {
-                info!("Deleting expired paste with id: {}", id);
+                info!("Deleting expired share with id: {}", id);
             }
             !expired
         });
@@ -394,7 +394,7 @@ async fn handle_index(State(state): State<SharedState>) -> Result<Html<String>, 
 
 async fn handle_create_encrypted(
     State(state): State<SharedState>,
-    Json(payload): Json<PastePayload>,
+    Json(payload): Json<SharePayload>,
 ) -> Result<Json<CreateResponse>, ApiError> {
     let Ok(nonce) = base64_engine.decode(&payload.nonce_b64) else {
         return reject(StatusCode::BAD_REQUEST, "Invalid nonce encoding");
@@ -414,36 +414,36 @@ async fn handle_create_encrypted(
         );
     }
 
-    let paste_id = generate_paste_id();
-    let paste = EncryptedPaste {
+    let share_id = generate_share_id();
+    let share = EncryptedShare {
         encrypted_data,
         nonce,
         timestamp: Instant::now(),
     };
 
-    let mut pastes = state.pastes.write().await;
-    if pastes.len() >= MAX_PASTE_COUNT {
+    let mut shares = state.shares.write().await;
+    if shares.len() >= MAX_SHARE_COUNT {
         // Reclaim any expired slots before refusing.
         let now = Instant::now();
-        pastes.retain(|_, paste| !is_expired(paste, now));
+        shares.retain(|_, share| !is_expired(share, now));
     }
-    if pastes.len() >= MAX_PASTE_COUNT {
+    if shares.len() >= MAX_SHARE_COUNT {
         return reject(
             StatusCode::SERVICE_UNAVAILABLE,
             "Server is full: maximum number of shares reached. Try again later.",
         );
     }
-    if pastes.contains_key(&paste_id) {
-        error!("Paste ID collision detected for ID: {}", paste_id);
+    if shares.contains_key(&share_id) {
+        error!("Share ID collision detected for ID: {}", share_id);
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Could not save paste, please try again.",
+            "Could not save share, please try again.",
         ));
     }
-    pastes.insert(paste_id.clone(), paste);
+    shares.insert(share_id.clone(), share);
 
-    info!("Stored encrypted paste with id: {}", paste_id);
-    Ok(Json(CreateResponse { paste_id }))
+    info!("Stored encrypted share with id: {}", share_id);
+    Ok(Json(CreateResponse { share_id }))
 }
 
 async fn handle_retrieve_page() -> Result<Html<String>, ApiError> {
@@ -461,26 +461,26 @@ async fn handle_static_asset(Path(file): Path<String>) -> Response {
     }
 }
 
-async fn handle_get_encrypted_paste(
+async fn handle_get_encrypted_share(
     State(state): State<SharedState>,
-    Path(paste_id): Path<String>,
-) -> Result<Json<PastePayload>, StatusCode> {
+    Path(share_id): Path<String>,
+) -> Result<Json<SharePayload>, StatusCode> {
     // Validate before logging: the ID is attacker-controlled and must never reach the log raw.
-    if !is_valid_paste_id(&paste_id) {
-        warn!("Received get request with invalid paste_id format.");
+    if !is_valid_share_id(&share_id) {
+        warn!("Received get request with invalid share_id format.");
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let pastes = state.pastes.read().await;
+    let shares = state.shares.read().await;
     // Never serve a share past its lifetime, even if the sweep has not removed it yet.
-    let live = |paste: &&EncryptedPaste| !is_expired(paste, Instant::now());
-    let Some(paste) = pastes.get(&paste_id).filter(live) else {
-        warn!("Paste not found for id: {}", paste_id);
+    let live = |share: &&EncryptedShare| !is_expired(share, Instant::now());
+    let Some(share) = shares.get(&share_id).filter(live) else {
+        warn!("Share not found for id: {}", share_id);
         return Err(StatusCode::NOT_FOUND);
     };
-    info!("Returning encrypted data for id: {}", paste_id);
-    Ok(Json(PastePayload {
-        encrypted_data_b64: base64_engine.encode(&paste.encrypted_data),
-        nonce_b64: base64_engine.encode(&paste.nonce),
+    info!("Returning encrypted data for id: {}", share_id);
+    Ok(Json(SharePayload {
+        encrypted_data_b64: base64_engine.encode(&share.encrypted_data),
+        nonce_b64: base64_engine.encode(&share.nonce),
     }))
 }

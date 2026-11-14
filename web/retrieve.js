@@ -1,7 +1,7 @@
 const KEY_BYTE_LENGTH = 32; // Must match creation
 const NONCE_BYTE_LENGTH = 12; // Must match creation
 
-const contentBox = document.getElementById('pasteContent');
+const contentBox = document.getElementById('shareContent');
 const statusLine = document.getElementById('status');
 const copyButton = document.getElementById('copyButton');
 
@@ -27,12 +27,12 @@ function setStatus(message, kind) {
     statusLine.classList.toggle('is-ok', kind === 'ok');
 }
 
-async function getAndDecryptPaste() {
+async function getAndDecryptShare() {
     try {
-        const pasteId = window.location.pathname.split('/').pop();
+        const shareId = window.location.pathname.split('/').pop();
         const fragmentKeyB64 = window.location.hash.substring(1);
 
-        if (!pasteId) {
+        if (!shareId) {
             throw new Error('This link has no secret ID. Check that you copied the whole link.');
         }
         if (!fragmentKeyB64) {
@@ -57,7 +57,7 @@ async function getAndDecryptPaste() {
         window.history.replaceState(null, '', window.location.pathname);
 
         setStatus('Fetching ciphertext...');
-        const response = await fetch(`/api/paste/${encodeURIComponent(pasteId)}`);
+        const response = await fetch(`/api/share/${encodeURIComponent(shareId)}`);
         if (response.status === 404 || response.status === 400) {
             throw new Error('Secret not found. It may have expired, or the link is incorrect.');
         }
@@ -107,4 +107,4 @@ async function copySecret() {
 }
 
 copyButton.addEventListener('click', copySecret);
-getAndDecryptPaste();
+getAndDecryptShare();

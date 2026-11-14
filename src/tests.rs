@@ -2,7 +2,7 @@ use super::*;
 
 fn state() -> SharedState {
     Arc::new(AppData {
-        pastes: RwLock::new(HashMap::new()),
+        shares: RwLock::new(HashMap::new()),
         create_slots: Semaphore::new(0),
         create_token: Some("secret".into()),
         tls_enabled: false,
@@ -38,21 +38,21 @@ async fn authentication_precedes_upload_slots() {
 
 #[test]
 fn expiration_boundary() {
-    let paste = EncryptedPaste {
+    let share = EncryptedShare {
         encrypted_data: vec![1],
         nonce: vec![0; NONCE_LENGTH],
         timestamp: Instant::now(),
     };
     assert!(!is_expired(
-        &paste,
-        paste.timestamp + EXPIRY_DURATION - Duration::from_nanos(1)
+        &share,
+        share.timestamp + EXPIRY_DURATION - Duration::from_nanos(1)
     ));
-    assert!(is_expired(&paste, paste.timestamp + EXPIRY_DURATION));
+    assert!(is_expired(&share, share.timestamp + EXPIRY_DURATION));
 }
 
 #[test]
-fn paste_ids_have_strict_shape() {
-    assert!(is_valid_paste_id(&generate_paste_id()));
-    assert!(!is_valid_paste_id("short"));
-    assert!(!is_valid_paste_id(&"/".repeat(PASTE_ID_LENGTH)));
+fn share_ids_have_strict_shape() {
+    assert!(is_valid_share_id(&generate_share_id()));
+    assert!(!is_valid_share_id("short"));
+    assert!(!is_valid_share_id(&"/".repeat(SHARE_ID_LENGTH)));
 }
