@@ -5,7 +5,7 @@ _______  _____\______ \_______  ____ ______
  |__|  /____  >_______  /__|   \____/|   __/ 
             \/        \/             |__|      
 
-rsDrop is a tiny, end-to-end encrypted, pastebin-style sharing app.
+rsDrop is a tiny, end-to-end encrypted, pastebin-style secrets sharing app.
 It aims to be lightweight, fast, and ephemeral by keeping data only in memory.
 
 Why  
