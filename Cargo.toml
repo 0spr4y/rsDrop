@@ -5,18 +5,23 @@ edition = "2024"
 
 [dependencies]
 axum = "0.7"
-tokio = { version = "1", features = ["full"] } # Async runtime (macros, rt-multi-thread, time, sync, net, fs) # Added fs feature
+tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 base64 = "0.22"
+subtle = "2" # Constant-time comparison of the create token
+zeroize = "1" # Optimization-resistant buffer clearing before release
 rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
-tower-http = { version = "0.5", features = ["cors"] }
-html-escape = "0.2"
 
-# --- New Dependencies ---
 clap = { version = "4", features = ["derive"] } # Command-line argument parsing
-axum-server = { version = "0.6", features = ["tls-rustls"] } # Axum server with TLS support
-rustls = "0.22"             # TLS library (used by axum-server)
-rustls-pemfile = "2.1"       # Reading PEM formatted keys/certs
+axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] } # Axum server with TLS support
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] } # TLS, using the ring crypto provider
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+strip = true        # Drop symbols: smaller binary and image
+lto = true
+codegen-units = 1

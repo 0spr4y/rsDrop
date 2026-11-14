@@ -1,8 +1,18 @@
+rsDrop release checklist
 
+Dependencies
+- [ ] Resolve RUSTSEC-2025-0134: rustls-pemfile 2.2.0 is unmaintained (via axum-server 0.7.3). The last audit reported no vulnerability findings and no fixed upgrade for this warning. Investigate an upstream update or alternative PEM loader and test TLS compatibility.
+  https://rustsec.org/advisories/RUSTSEC-2025-0134
+- [ ] Run cargo audit in CI and before releases; build releases with --locked.
 
-- Unbounded memory growth (DoS): server stores pastes in RAM with only time-based expiry; no cap on total count or bytes. Add a global memory/paste cap and eviction (LRU/TTL), and reject writes when over limit. Consider per-IP quotas.
-- Missing HTTP body size limit: JSON request bodies are not capped at the transport layer, allowing oversized payloads to be read before size checks. Add `DefaultBodyLimit` or `RequestBodyLimitLayer` (e.g., ~11 MiB) to Axum.
-- No rate limiting/throttling: endpoints can be spammed to exhaust RAM/CPU. Add per-IP rate limiting (tower layers) and cheap pre-checks.
-- Client XSS via error rendering: `web/retrieve.html` uses `innerHTML` with interpolated `error.message` that may include server response text. Switch to `textContent` for errors (or escape before inserting).
-- Missing security headers: no CSP/Referrer-Policy/X-Content-Type-Options. Serve static pages with a strict CSP (no inline, nonce-based if needed) and add common headers.
-- Build fragility (non-security): missing `handle_retrieve_page`/`handle_get_encrypted_paste` implementations referenced by routes; Cargo edition set to `2024` may not be available on stable.
+Deployment
+- [ ] Require valid HTTPS. With a TLS reverse proxy, keep the backend port private and configure HSTS at the proxy.
+- [ ] Enable --create-token for restricted creation; protect startup logs containing the token.
+- [ ] Add rate limits for creation, failed authentication, and retrieval, plus proxy connection limits and request/header timeouts.
+- [ ] Set container memory/CPU/PID limits, a read-only filesystem, dropped capabilities, and no-new-privileges. Mount TLS keys at runtime.
+- [ ] Restrict log access and retention; review share-ID logging and avoid proxy request-body logging.
+- [ ] Verify host swap/hibernation, core-dump, and crash-collector policies as described in Readme.txt.
+
+Tests
+- [ ] Extend existing authentication-ordering, expiration-boundary, and ID-validation tests to cover successful creation/retrieval, body and decoded-size limits, invalid nonces, capacity, concurrent requests, and security headers on errors.
+- [ ] Test browser encryption/decryption, tampered ciphertext, malformed/missing key fragments, Unicode size boundaries, and HTTPS through the proxy.
