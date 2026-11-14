@@ -1,62 +1,17 @@
-rsDrop
+# Build output
+/target/
+/dist/
+/rsDrop
 
+# Secrets and local config
+.env
+*.pem
+*.key
 
-# Operating System files
+# OS and editor files
 .DS_Store
 Thumbs.db
-Desktop.ini
-
-# Build artifacts
-*.log
-*.tmp
-*.bak
-*.swp
-*.swo
-*.orig
-*.rej
-*.diff
-*.patch
-
-# IDE and Editor files
 .idea/
 .vscode/
-*.iml
-*.iws
-*.ipr
-*.sublime-project
-.project
-.classpath
-.settings/
-
-# Dependencies and build tools
-node_modules/
-vendor/
-target/
-build/
-dist/
-venv/
-env/
-
-# Configuration files
-*.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Compiled files (language-specific examples)
-*.pyc
-*.o
-*.exe
-*.dll
-*.so
-*.jar
-*.class
-
-# Other common ignored files
+*.swp
 *~
-#*#
-.#*
-*.zip
-*.tar.gz
-*.rar

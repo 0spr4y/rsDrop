@@ -14,3 +14,6 @@ Thumbs.db
 # Node/npm (if any assets get added later)
 node_modules
 
+
+# Local build output
+dist
