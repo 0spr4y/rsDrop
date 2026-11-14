@@ -82,6 +82,8 @@ Good for quick hand-offs, temporary notes, throwaway snippets, password sharing,
 Build, generate a self-signed certificate, and run over HTTPS:
 
 ```sh
+git clone https://github.com/0spr4y/rsDrop.git
+cd rsDrop
 make
 cd dist
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
@@ -93,6 +95,8 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
 Or the same thing, but requiring a token to create secrets (the token link is printed in the log at startup):
 
 ```sh
+git clone https://github.com/0spr4y/rsDrop.git
+cd rsDrop
 make
 cd dist
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
