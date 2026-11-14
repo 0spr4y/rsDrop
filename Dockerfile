@@ -11,11 +11,11 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src \
  && printf "fn main() {}\n" > src/main.rs \
- && cargo fetch
+ && cargo fetch --locked
 
 # Copy real sources and build
 COPY . .
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN cargo build --release --locked --target x86_64-unknown-linux-musl
 
 # --- Runtime: empty image, just the static binary and the web assets ---
 FROM scratch

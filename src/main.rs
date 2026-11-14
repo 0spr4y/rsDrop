@@ -1,5 +1,6 @@
 use axum::{
     Router,
+    body::Bytes,
     extract::{DefaultBodyLimit, Json, Path, Request, State},
     http::{HeaderName, HeaderValue, StatusCode, header},
     middleware::{self, Next},
@@ -84,26 +85,32 @@ struct Args {
 
 // --- Data Structures ---
 struct EncryptedShare {
-    encrypted_data: Vec<u8>,
-    nonce: Vec<u8>,
+    /// Nonce followed by ciphertext, exactly as served. Responses share this one
+    /// buffer instead of copying it, so downloads cannot multiply memory use.
+    data: Bytes,
     timestamp: Instant,
 }
 
-impl Drop for EncryptedShare {
-    fn drop(&mut self) {
-        // Best-effort random pass, followed by optimization-resistant zeroization.
-        // Do not panic during cleanup if the random source fails.
-        let mut rng = rand::thread_rng();
-        let _ = rng.try_fill_bytes(&mut self.encrypted_data);
-        let _ = rng.try_fill_bytes(&mut self.nonce);
-        self.encrypted_data.zeroize();
-        self.nonce.zeroize();
+/// Owns a share's bytes; dropped once the store and every in-flight response have released them.
+struct WipeOnDrop(Vec<u8>);
+
+impl AsRef<[u8]> for WipeOnDrop {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
-/// Body of both the create request and the retrieve response.
-#[derive(Serialize, Deserialize)]
-struct SharePayload {
+impl Drop for WipeOnDrop {
+    fn drop(&mut self) {
+        // Best-effort random pass, followed by optimization-resistant zeroization.
+        // Do not panic during cleanup if the random source fails.
+        let _ = rand::thread_rng().try_fill_bytes(&mut self.0);
+        self.0.zeroize();
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateRequest {
     encrypted_data_b64: String,
     nonce_b64: String,
 }
@@ -394,20 +401,19 @@ async fn handle_index(State(state): State<SharedState>) -> Result<Html<String>, 
 
 async fn handle_create_encrypted(
     State(state): State<SharedState>,
-    Json(payload): Json<SharePayload>,
+    Json(payload): Json<CreateRequest>,
 ) -> Result<Json<CreateResponse>, ApiError> {
-    let Ok(nonce) = base64_engine.decode(&payload.nonce_b64) else {
+    let Ok(mut data) = base64_engine.decode(&payload.nonce_b64) else {
         return reject(StatusCode::BAD_REQUEST, "Invalid nonce encoding");
     };
     let Ok(mut encrypted_data) = base64_engine.decode(&payload.encrypted_data_b64) else {
         return reject(StatusCode::BAD_REQUEST, "Invalid encrypted_data encoding");
     };
-    encrypted_data.shrink_to_fit(); // Stored for up to an hour: do not keep spare capacity
 
-    if nonce.len() != NONCE_LENGTH {
+    if data.len() != NONCE_LENGTH {
         return reject(StatusCode::BAD_REQUEST, "Invalid nonce length. Expected 12");
     }
-    if encrypted_data.is_empty() || encrypted_data.len() + nonce.len() > MAX_ENCRYPTED_SIZE {
+    if encrypted_data.is_empty() || encrypted_data.len() + data.len() > MAX_ENCRYPTED_SIZE {
         return reject(
             StatusCode::BAD_REQUEST,
             "Encrypted content exceeds maximum size limit or is empty",
@@ -415,9 +421,11 @@ async fn handle_create_encrypted(
     }
 
     let share_id = generate_share_id();
+    data.reserve_exact(encrypted_data.len()); // Stored for up to an hour: do not keep spare capacity
+    data.extend_from_slice(&encrypted_data);
+    encrypted_data.zeroize(); // The stored copy is the only one that should outlive this request
     let share = EncryptedShare {
-        encrypted_data,
-        nonce,
+        data: Bytes::from_owner(WipeOnDrop(data)),
         timestamp: Instant::now(),
     };
 
@@ -464,7 +472,7 @@ async fn handle_static_asset(Path(file): Path<String>) -> Response {
 async fn handle_get_encrypted_share(
     State(state): State<SharedState>,
     Path(share_id): Path<String>,
-) -> Result<Json<SharePayload>, StatusCode> {
+) -> Result<Bytes, StatusCode> {
     // Validate before logging: the ID is attacker-controlled and must never reach the log raw.
     if !is_valid_share_id(&share_id) {
         warn!("Received get request with invalid share_id format.");
@@ -479,8 +487,5 @@ async fn handle_get_encrypted_share(
         return Err(StatusCode::NOT_FOUND);
     };
     info!("Returning encrypted data for id: {}", share_id);
-    Ok(Json(SharePayload {
-        encrypted_data_b64: base64_engine.encode(&share.encrypted_data),
-        nonce_b64: base64_engine.encode(&share.nonce),
-    }))
+    Ok(share.data.clone())
 }

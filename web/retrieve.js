@@ -64,13 +64,13 @@ async function getAndDecryptShare() {
         if (!response.ok) {
             throw new Error(`Server error ${response.status}`);
         }
-        const responseData = await response.json();
-
-        const encryptedDataBytes = base64ToArrayBuffer(responseData.encrypted_data_b64);
-        const nonceBytes = base64ToArrayBuffer(responseData.nonce_b64);
-        if (nonceBytes.byteLength !== NONCE_BYTE_LENGTH) {
-            throw new Error('Received an invalid nonce from the server.');
+        // The response body is the nonce followed by the ciphertext.
+        const responseBytes = await response.arrayBuffer();
+        if (responseBytes.byteLength <= NONCE_BYTE_LENGTH) {
+            throw new Error('Received an invalid response from the server.');
         }
+        const nonceBytes = responseBytes.slice(0, NONCE_BYTE_LENGTH);
+        const encryptedDataBytes = responseBytes.slice(NONCE_BYTE_LENGTH);
 
         setStatus('Decrypting...');
         let decryptedDataBytes;

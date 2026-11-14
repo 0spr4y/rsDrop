@@ -39,8 +39,7 @@ async fn authentication_precedes_upload_slots() {
 #[test]
 fn expiration_boundary() {
     let share = EncryptedShare {
-        encrypted_data: vec![1],
-        nonce: vec![0; NONCE_LENGTH],
+        data: Bytes::from_owner(WipeOnDrop(vec![0; NONCE_LENGTH + 1])),
         timestamp: Instant::now(),
     };
     assert!(!is_expired(
