@@ -9,6 +9,10 @@ _______  _____\______ \_______  ____ ______
 
 # rsDrop
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-informational.svg)
+![Rust edition 2024](https://img.shields.io/badge/rust-edition%202024-orange.svg)
+
 rsDrop is a tiny, end-to-end encrypted, pastebin-style secrets sharing app.
 It aims to be lightweight, fast, and ephemeral by keeping data only in memory.
 
@@ -28,6 +32,7 @@ It aims to be lightweight, fast, and ephemeral by keeping data only in memory.
 - [Security notes](#security-notes)
 - [Memory retention and deployment policy](#memory-retention-and-deployment-policy)
 - [Project layout](#project-layout)
+- [License](#license)
 
 ## Why
 
@@ -74,12 +79,29 @@ Good for quick hand-offs, temporary notes, throwaway snippets, password sharing,
 
 ## Quick start
 
+Build, generate a self-signed certificate, and run over HTTPS:
+
 ```sh
 make
-cd dist && ./rsDrop --addr 127.0.0.1:8080
+cd dist
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout key.pem -out cert.pem -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+./rsDrop --addr 127.0.0.1:8443 --cert cert.pem --key key.pem
 ```
 
-Then open <http://127.0.0.1:8080>. For anything beyond local testing, run it over HTTPS (see [Security notes](#security-notes)).
+Or the same thing, but requiring a token to create secrets (the token link is printed in the log at startup):
+
+```sh
+make
+cd dist
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout key.pem -out cert.pem -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+./rsDrop --addr 127.0.0.1:8443 --cert cert.pem --key key.pem --create-token
+```
+
+Then open <https://localhost:8443>. Your browser will warn about the self-signed certificate; that is expected for local testing. For a real deployment, use a certificate from a trusted CA instead (see [Security notes](#security-notes)).
 
 ## Building
 
@@ -183,3 +205,7 @@ For native TLS, mount certificates and private keys read-only at runtime and pas
 | `web/style.css` | Shared stylesheet |
 
 Scripts and the stylesheet are served under `/static/`, so a strict Content-Security-Policy can forbid inline code.
+
+## License
+
+Released under the [MIT License](LICENSE).

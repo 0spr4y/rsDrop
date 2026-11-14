@@ -2,6 +2,10 @@
 name = "rsDrop"
 version = "0.1.0"
 edition = "2024"
+description = "A tiny, end-to-end encrypted, in-memory secrets sharing app"
+license = "MIT"
+repository = "https://github.com/0spr4y/rsDrop"
+readme = "README.md"
 
 [dependencies]
 axum = "0.7"
