@@ -33,7 +33,7 @@ It aims to be lightweight, fast, and ephemeral by keeping data only in memory.
 
 Most self-hosted paste platforms require excessive server resources and can be complicated to configure.
 
-rsDrop is designed to implement secure, ephemeral, self-hosted secret sharing with compact, easy-to-audit code. The whole project aims to stay under 1000 lines of code.
+rsDrop is designed to implement secure, ephemeral, self-hosted secret sharing with compact, easy-to-audit code. The whole project aims to stay under 2000 lines of code.
 
 ## How it works
 
