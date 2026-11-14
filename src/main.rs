@@ -7,7 +7,11 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
-use axum_server::{Handle, tls_rustls::RustlsConfig};
+use axum_server::{
+    Handle,
+    accept::Accept,
+    tls_rustls::{RustlsAcceptor, RustlsConfig},
+};
 use base64::{
     Engine as _,
     engine::general_purpose::{STANDARD as base64_engine, URL_SAFE_NO_PAD},
@@ -17,13 +21,19 @@ use rand::{Rng, RngCore, distributions::Alphanumeric};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    future::Future,
+    io,
     net::SocketAddr,
     path::PathBuf,
+    pin::Pin,
     sync::Arc,
     time::{Duration, Instant},
 };
 use subtle::ConstantTimeEq;
-use tokio::sync::{RwLock, Semaphore};
+use tokio::{
+    net::TcpStream,
+    sync::{RwLock, Semaphore},
+};
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use zeroize::Zeroize;
@@ -36,6 +46,7 @@ const MAX_ENCRYPTED_SIZE: usize = 640 * 1024; // 640 KiB limit (encrypted data +
 const MAX_REQUEST_BODY_SIZE: usize = 1024 * 1024; // 1 MiB: fits a max-size share once base64/JSON encoded
 // Uploads buffered at once; each holds up to ~2 MiB while it is read and decoded, so this bounds peak memory.
 const MAX_CONCURRENT_CREATES: usize = 8;
+const FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(10); // How long a new HTTPS-port connection may stay silent
 const CREATE_TIMEOUT: Duration = Duration::from_secs(30); // A stalled upload cannot hold a slot for longer
 const MAX_SHARE_COUNT: usize = 100; // Maximum number of shares held on the server at once
 const CREATE_TOKEN_BYTE_LENGTH: usize = 32; // Random bytes behind the create token
@@ -233,7 +244,8 @@ async fn main() {
             shutdown_signal().await;
             shutdown_handle.shutdown();
         });
-        axum_server::bind_rustls(args.addr, tls_config)
+        axum_server::bind(args.addr)
+            .acceptor(RustlsAcceptor::new(tls_config).acceptor(RedirectPlainHttp))
             .handle(handle)
             .serve(app.into_make_service())
             .await
@@ -251,6 +263,64 @@ async fn main() {
         fatal(format!("Server failed: {e}"));
     }
     info!("Server shutting down.");
+}
+
+/// Runs before the TLS handshake: a client that speaks plain HTTP to the HTTPS port
+/// is redirected to HTTPS instead of getting a connection error.
+#[derive(Clone)]
+struct RedirectPlainHttp;
+
+impl<S: Send + 'static> Accept<TcpStream, S> for RedirectPlainHttp {
+    type Stream = TcpStream;
+    type Service = S;
+    type Future = Pin<Box<dyn Future<Output = io::Result<(TcpStream, S)>> + Send>>;
+
+    fn accept(&self, stream: TcpStream, service: S) -> Self::Future {
+        Box::pin(async move {
+            let mut head = [0u8; 2048];
+            let length = tokio::time::timeout(FIRST_BYTE_TIMEOUT, stream.peek(&mut head)).await??;
+            // Every TLS connection opens with a handshake record, whose first byte is 0x16.
+            if head[..length].first() == Some(&0x16) {
+                return Ok((stream, service));
+            }
+            let response = match https_location(&head[..length]) {
+                Some(location) => format!(
+                    "HTTP/1.1 301 Moved Permanently\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                ),
+                None => {
+                    "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .into()
+                }
+            };
+            // Consume the request first: closing with unread data would reset the connection before the reply arrives.
+            let _ = stream.try_read(&mut head);
+            let _ = stream.try_write(response.as_bytes());
+            Err(io::Error::other("plain HTTP on the HTTPS port"))
+        })
+    }
+}
+
+/// The HTTPS URL for a plain-HTTP request head. Only a well-formed Host is echoed back, and any
+/// path that is not plainly safe (the request is attacker-controlled) is replaced with `/`.
+fn https_location(head: &[u8]) -> Option<String> {
+    let mut lines = std::str::from_utf8(head).ok()?.split("\r\n");
+    let path = lines.next()?.split(' ').nth(1)?;
+    let host = lines.find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("host").then(|| value.trim())
+    })?;
+    let safe = |text: &str, punctuation: &str| {
+        !text.is_empty()
+            && text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || punctuation.contains(c))
+    };
+    let path = if path.starts_with('/') && safe(path, "/-_.") {
+        path
+    } else {
+        "/"
+    };
+    safe(host, ".-:[]").then(|| format!("https://{host}{path}"))
 }
 
 // --- Utility Functions ---

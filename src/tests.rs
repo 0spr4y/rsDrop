@@ -55,3 +55,22 @@ fn share_ids_have_strict_shape() {
     assert!(!is_valid_share_id("short"));
     assert!(!is_valid_share_id(&"/".repeat(SHARE_ID_LENGTH)));
 }
+
+#[test]
+fn plain_http_is_redirected_to_https() {
+    let location = |head: &str| https_location(head.as_bytes());
+    assert_eq!(
+        location("GET /s/abc123 HTTP/1.1\r\nHost: example.com:8443\r\n\r\n").as_deref(),
+        Some("https://example.com:8443/s/abc123")
+    );
+    // An unsafe path falls back to the root; a missing or malformed Host is refused.
+    assert_eq!(
+        location("GET /?next=//evil HTTP/1.1\r\nhost: [::1]:8443\r\n\r\n").as_deref(),
+        Some("https://[::1]:8443/")
+    );
+    assert_eq!(location("GET / HTTP/1.1\r\n\r\n"), None);
+    assert_eq!(
+        location("GET / HTTP/1.1\r\nHost: evil.com/\\@x\r\n\r\n"),
+        None
+    );
+}

@@ -79,9 +79,11 @@ Good for quick hand-offs, temporary notes, throwaway snippets, password sharing,
 
 ## Quick start
 
-Build, generate a self-signed certificate, and run over HTTPS:
+Clone, build, generate a self-signed certificate, and run over HTTPS (needs Rust, `make` and `openssl`):
 
 ```sh
+git clone https://github.com/0spr4y/rsDrop.git
+cd rsDrop
 make
 cd dist
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
@@ -93,6 +95,8 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
 Or the same thing, but requiring a token to create secrets (the token link is printed in the log at startup):
 
 ```sh
+git clone https://github.com/0spr4y/rsDrop.git
+cd rsDrop
 make
 cd dist
 openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
@@ -139,6 +143,8 @@ Run with an existing TLS certificate and key (PEM):
 rsDrop --addr 0.0.0.0:8443 --cert cert.pem --key key.pem
 ```
 
+With TLS enabled, a browser that opens `http://` on the same port is redirected to `https://`.
+
 TLS is optional: without `--cert`/`--key` the server speaks plain HTTP, which is only suitable behind a TLS-terminating reverse proxy or for local testing.
 
 ### Create token
@@ -182,7 +188,7 @@ For native TLS, mount certificates and private keys read-only at runtime and pas
 - **The link is as sensitive as the secret.** Anyone who obtains the full link within 60 minutes can read it.
 - **No burn-after-read.** A link can be opened more than once until it expires.
 - **Use `--create-token`** on any instance reachable by people you do not trust; without it anyone can fill the server.
-- After viewing, the key is removed from the address bar and that history entry, so reloading the page needs the original link again.
+- **The link stays in the recipient's browser history.** After viewing, the key is removed from the address bar, so reloading needs the original link again, but the browser's history still holds the full link, key included. With history sync enabled it is also uploaded to the browser vendor.
 - Expiration means the API stops serving a share after its 60-minute lifetime. A sweep removes expired shares roughly once a minute. Before releasing stored ciphertext and nonce buffers, it attempts a random overwrite and then zeroizes them. This does not erase all memory copies or revoke data already downloaded by recipients.
 
 ## Memory retention and deployment policy
